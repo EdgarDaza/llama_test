@@ -113,33 +113,57 @@ class _ChatScreenState extends State<ChatScreen> {
     },
   ];
 
-  List<String> savedPrompts = [
-    "Ideas para nombres de mascotas",
-    "Recetas saludables con pocos ingredientes",
-    "Ejercicios de programación para principiantes",
-    "Consejos para viajar con bajo presupuesto"
-  ];
+  Map<String, List<Map<String, String>>> savedConversations = {};
+List<String> savedPromptNames = [];
 
   @override
 void initState() {
   super.initState();
-  _loadSavedPrompts(); // Cargar prompts al iniciar
+  _loadSavedPromptNames(); // Cargar prompts al iniciar
   WidgetsBinding.instance.addPostFrameCallback((_) {
     _toggleTheme(); // Sincroniza tema al cargar
+    
   });
 }
 
-Future<void> _loadSavedPrompts() async {
+Future<void> _loadSavedPromptNames() async {
   final prefs = await SharedPreferences.getInstance();
+  final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
   setState(() {
-    savedPrompts = prefs.getStringList('saved_prompts') ?? [
-      "Ideas para nombres de mascotas",
-      "Recetas saludables con pocos ingredientes",
-      "Ejercicios de programación para principiantes",
-      "Consejos para viajar con bajo presupuesto"
-    ];
+    savedPromptNames = allConversations
+        .map((e) => jsonDecode(e)['name'] as String)
+        .toList();
   });
 }
+
+void _saveFullConversation() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  // Convierte cada mensaje a JSON string
+  final conversationJson = chatMessages.map((msg) => jsonEncode(msg)).toList();
+
+  await prefs.setStringList('saved_conversation', conversationJson);
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text("Conversación guardada"),
+      backgroundColor: Theme.of(context).colorScheme.secondary,
+    ),
+  );
+}
+
+
+
+Future<void> _loadFullConversation() async {
+  final prefs = await SharedPreferences.getInstance();
+  final conversationJson = prefs.getStringList('saved_conversation') ?? [];
+  setState(() {
+    chatMessages = conversationJson
+        .map((msg) => Map<String, String>.from(jsonDecode(msg)))
+        .toList();
+  });
+}
+
   Future<void> query(String prompt) async {
   if (prompt.isEmpty) return;
 
@@ -275,18 +299,66 @@ Future<void> _loadSavedPrompts() async {
     MyApp.of(context)?.toggleTheme();
   }
 
-  void _saveCurrentPrompt() async {
-  if (_controller.text.isEmpty) return;
-  
+  void _saveCurrentConversationWithName() async {
+  final TextEditingController nameController = TextEditingController();
+
+  // Mostrar diálogo para pedir el nombre
+  final name = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Guardar conversación'),
+      content: TextField(
+        controller: nameController,
+        decoration: const InputDecoration(
+          labelText: 'Nombre para la conversación',
+        ),
+        autofocus: true,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context), // Cancelar
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, nameController.text.trim()),
+          child: const Text('Guardar'),
+        ),
+      ],
+    ),
+  );
+
+  if (name == null || name.isEmpty) return;
+
   final prefs = await SharedPreferences.getInstance();
+
+  // Guarda la conversación actual como lista de JSON strings
+  final conversationJson = chatMessages.map((msg) => jsonEncode(msg)).toList();
+
+  // Carga las conversaciones guardadas
+  final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
+  final allConversationsMap = <String, List<String>>{};
+  for (final entry in allConversations) {
+    final decoded = jsonDecode(entry);
+    allConversationsMap[decoded['name']] = List<String>.from(decoded['conversation']);
+  }
+
+  // Agrega o reemplaza la conversación con el nombre dado
+  allConversationsMap[name] = conversationJson;
+
+  // Guarda de nuevo todas las conversaciones
+  final updatedList = allConversationsMap.entries
+      .map((e) => jsonEncode({'name': e.key, 'conversation': e.value}))
+      .toList();
+
+  await prefs.setStringList('saved_conversations_names', updatedList);
+
   setState(() {
-    savedPrompts.add(_controller.text);
-    prefs.setStringList('saved_prompts', savedPrompts); // Guardar en disco
+    savedPromptNames = allConversationsMap.keys.toList();
   });
 
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
-      content: const Text("Prompt guardado"),
+      content: Text('Conversación guardada como "$name"'),
       backgroundColor: Theme.of(context).colorScheme.secondary,
     ),
   );
@@ -442,23 +514,37 @@ Future<void> _loadSavedPrompts() async {
                     ),
                   ),
                   Expanded(
-  child: savedPrompts.isEmpty
-      ? const Center(child: Text("No hay prompts guardados"))
+  child: savedPromptNames.isEmpty
+      ? const Center(child: Text("No hay conversaciones guardadas"))
       : ListView.builder(
-          itemCount: savedPrompts.length,
+          key: Key('prompts_${savedPromptNames.length}'),
+          itemCount: savedPromptNames.length,
           itemBuilder: (context, index) => ListTile(
-            title: Text(savedPrompts[index]),
-            onTap: () {
-              query(savedPrompts[index]);
-              setState(() => _sidebarVisible = false);
+            title: Text(savedPromptNames[index]),
+            onTap: () async {
+              final prefs = await SharedPreferences.getInstance();
+              final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
+              final entry = allConversations
+                  .map((e) => jsonDecode(e))
+                  .firstWhere((e) => e['name'] == savedPromptNames[index]);
+              setState(() {
+                chatMessages = (entry['conversation'] as List)
+                    .map((msg) => Map<String, String>.from(jsonDecode(msg)))
+                    .toList();
+                _sidebarVisible = false;
+              });
             },
             trailing: IconButton(
               icon: const Icon(Icons.delete_outline, size: 18),
               onPressed: () async {
                 final prefs = await SharedPreferences.getInstance();
+                final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
+                final updated = allConversations
+                    .where((e) => jsonDecode(e)['name'] != savedPromptNames[index])
+                    .toList();
+                await prefs.setStringList('saved_conversations_names', updated);
                 setState(() {
-                  savedPrompts.removeAt(index);
-                  prefs.setStringList('saved_prompts', savedPrompts);
+                  savedPromptNames.removeAt(index);
                 });
               },
             ),
@@ -479,7 +565,7 @@ Future<void> _loadSavedPrompts() async {
                   leading: const Icon(Icons.save),
                   title: const Text('Guardar prompt actual'),
                   dense: true,
-                  onTap: _saveCurrentPrompt,
+                  onTap: _saveCurrentConversationWithName,
                 ),
                 ListTile(
                   leading: Icon(
@@ -732,14 +818,14 @@ Future<void> _loadSavedPrompts() async {
             leading: const Icon(Icons.delete_forever),
             onTap: () async {
               final prefs = await SharedPreferences.getInstance();
-              setState(() {
-                savedPrompts.clear();
-                prefs.remove('saved_prompts');
-              });
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Prompts borrados')),
-              );
+  await prefs.remove('saved_conversations_names');
+  setState(() {
+    savedPromptNames.clear();
+  });
+  Navigator.pop(context);
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Conversaciones guardadas borradas')),
+  );
             },
           ),
         ],
