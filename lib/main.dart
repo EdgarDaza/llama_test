@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -120,65 +121,107 @@ class _ChatScreenState extends State<ChatScreen> {
   ];
 
   Future<void> query(String prompt) async {
-    if (prompt.isEmpty) return;
+  if (prompt.isEmpty) return;
 
-    setState(() {
-      _isLoading = true;
-      chatMessages.add({"role": "user", "content": prompt});
-      _scrollToBottom();
-    });
+  setState(() {
+    _isLoading = true;
+    chatMessages.add({"role": "user", "content": prompt});
+    // Solo para mostrar el streaming en la UI
+    chatMessages.add({"role": "system", "content": ""});
+    _scrollToBottom();
+  });
 
-    final data = {
-      "model": "llama3.2",
-      "messages": chatMessages,
-      "stream": false,
-    };
+  // Prepara los mensajes para enviar a Ollama (sin el mensaje vacío)
+  final messagesToSend = List<Map<String, String>>.from(chatMessages);
+  if (messagesToSend.isNotEmpty && messagesToSend.last["content"] == "") {
+    messagesToSend.removeLast();
+  }
 
-    try {
-      final response = await http.post(
-        Uri.parse("http://localhost:11434/api/chat"),
-        headers: {"Content-Type": "application/json"},
-        body: json.encode(data),
-      );
+  final data = {
+    "model": "llama3.2",
+    "messages": messagesToSend,
+    "stream": true,
+  };
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
+  try {
+    final request = http.Request(
+      'POST',
+      Uri.parse("http://localhost:11434/api/chat"),
+    );
+    request.headers["Content-Type"] = "application/json";
+    request.body = json.encode(data);
+
+    final response = await request.send();
+
+    if (response.statusCode == 200) {
+      final completer = Completer<void>();
+      String buffer = "";
+
+      response.stream
+          .transform(utf8.decoder)
+          .listen((chunk) {
+        for (var line in LineSplitter().convert(chunk)) {
+          if (line.trim().isEmpty) continue;
+          final jsonData = json.decode(line);
+          final content = jsonData["message"]?["content"] ?? "";
+          if (content.isNotEmpty) {
+            buffer += content;
+            setState(() {
+              chatMessages[chatMessages.length - 1]["content"] = buffer;
+              _scrollToBottom();
+            });
+          }
+        }
+      }, onDone: () {
         setState(() {
-          chatMessages.add({
-            "role": "system",
-            "content": responseData["message"]["content"],
-          });
-          _scrollToBottom();
+          _isLoading = false;
+          _controller.clear();
         });
-      } else {
+        completer.complete();
+      }, onError: (e) {
         setState(() {
           chatMessages.removeLast();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text("Error al conectar con el servidor"),
-              backgroundColor: Theme.of(context).colorScheme.secondary,
-            ),
-          );
+          _isLoading = false;
         });
-      }
-    } catch (e) {
-      setState(() {
-        chatMessages.removeLast();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Error: ${e.toString()}"),
             backgroundColor: Theme.of(context).colorScheme.secondary,
           ),
         );
+        completer.complete();
       });
-    } finally {
-      setState(() {
-        _isLoading = false;
-        _controller.clear();
-      });
-    }
-  }
 
+      await completer.future;
+    } else {
+      setState(() {
+        chatMessages.removeLast();
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text("Error al conectar con el servidor"),
+          backgroundColor: Theme.of(context).colorScheme.secondary,
+        ),
+      );
+    }
+  } catch (e) {
+    setState(() {
+      chatMessages.removeLast();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: ${e.toString()}"),
+          backgroundColor: Theme.of(context).colorScheme.secondary,
+        ),
+      );
+    });
+  } finally {
+    setState(() {
+      _isLoading = false;
+      _controller.clear();
+    });
+  }
+}
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
