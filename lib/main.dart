@@ -120,6 +120,26 @@ class _ChatScreenState extends State<ChatScreen> {
     "Consejos para viajar con bajo presupuesto"
   ];
 
+  @override
+void initState() {
+  super.initState();
+  _loadSavedPrompts(); // Cargar prompts al iniciar
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _toggleTheme(); // Sincroniza tema al cargar
+  });
+}
+
+Future<void> _loadSavedPrompts() async {
+  final prefs = await SharedPreferences.getInstance();
+  setState(() {
+    savedPrompts = prefs.getStringList('saved_prompts') ?? [
+      "Ideas para nombres de mascotas",
+      "Recetas saludables con pocos ingredientes",
+      "Ejercicios de programación para principiantes",
+      "Consejos para viajar con bajo presupuesto"
+    ];
+  });
+}
   Future<void> query(String prompt) async {
   if (prompt.isEmpty) return;
 
@@ -255,17 +275,22 @@ class _ChatScreenState extends State<ChatScreen> {
     MyApp.of(context)?.toggleTheme();
   }
 
-  void _saveCurrentPrompt() {
-    if (_controller.text.isNotEmpty) {
-      setState(() => savedPrompts.add(_controller.text));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Prompt guardado"),
-          backgroundColor: Theme.of(context).colorScheme.secondary,
-        ),
-      );
-    }
-  }
+  void _saveCurrentPrompt() async {
+  if (_controller.text.isEmpty) return;
+  
+  final prefs = await SharedPreferences.getInstance();
+  setState(() {
+    savedPrompts.add(_controller.text);
+    prefs.setStringList('saved_prompts', savedPrompts); // Guardar en disco
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text("Prompt guardado"),
+      backgroundColor: Theme.of(context).colorScheme.secondary,
+    ),
+  );
+}
 
   @override
   void dispose() {
@@ -324,11 +349,11 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ],
           ),
-          if (_sidebarVisible)
+          /*if (_sidebarVisible)
             GestureDetector(
               onTap: _toggleSidebar,
               child: Container(color: Colors.black.withOpacity(0.3)),
-            ),
+            ),*/
         ],
       ),
     );
@@ -417,25 +442,29 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: savedPrompts.length,
-                      itemBuilder: (context, index) {
-                        return ListTile(
-                          title: Text(savedPrompts[index]),
-                          dense: true,
-                          visualDensity: VisualDensity.compact,
-                          onTap: () {
-                            query(savedPrompts[index]);
-                            setState(() => _sidebarVisible = false);
-                          },
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            onPressed: () => setState(() => savedPrompts.removeAt(index)),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+  child: savedPrompts.isEmpty
+      ? const Center(child: Text("No hay prompts guardados"))
+      : ListView.builder(
+          itemCount: savedPrompts.length,
+          itemBuilder: (context, index) => ListTile(
+            title: Text(savedPrompts[index]),
+            onTap: () {
+              query(savedPrompts[index]);
+              setState(() => _sidebarVisible = false);
+            },
+            trailing: IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                setState(() {
+                  savedPrompts.removeAt(index);
+                  prefs.setStringList('saved_prompts', savedPrompts);
+                });
+              },
+            ),
+          ),
+        ),
+),
                 ],
               ),
             ),
@@ -678,50 +707,52 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showSettingsDialog(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Configuración'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              title: const Text('Modo oscuro'),
-              value: isDarkMode,
-              onChanged: (value) {
-                _toggleTheme();
-                Navigator.pop(context);
-              },
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              title: const Text('Borrar historial de chats'),
-              leading: const Icon(Icons.delete),
-              onTap: () {
-                _startNewChat();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Historial borrado'),
-                    backgroundColor:
-                        Theme.of(context).colorScheme.secondary,
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Configuración'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+            title: const Text('Modo oscuro'),
+            value: Theme.of(context).brightness == Brightness.dark,
+            onChanged: (value) => _toggleTheme(),
+          ),
+          ListTile(
+            title: const Text('Borrar historial de chats'),
+            leading: const Icon(Icons.chat_bubble_outline),
+            onTap: () {
+              _startNewChat();
+              Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            title: const Text('Borrar prompts guardados'),
+            leading: const Icon(Icons.delete_forever),
+            onTap: () async {
+              final prefs = await SharedPreferences.getInstance();
+              setState(() {
+                savedPrompts.clear();
+                prefs.remove('saved_prompts');
+              });
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Prompts borrados')),
+              );
+            },
           ),
         ],
       ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cerrar'),
+        ),
+      ],
+    ),
+  );
+}
 }
 
 class CapybaraLogoPainter extends CustomPainter {
