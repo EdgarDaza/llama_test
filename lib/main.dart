@@ -374,11 +374,20 @@ Future<void> _loadFullConversation() async {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.menu), onPressed: _toggleSidebar),
+        leading: isMobile
+            ? Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              )
+            : null,
         title: const Text('CapyChat'),
         actions: [
           IconButton(
@@ -387,12 +396,11 @@ Future<void> _loadFullConversation() async {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          Row(
-            children: [
-              if (_sidebarVisible) _buildSidebar(),
-              Expanded(
+      drawer: isMobile ? Drawer(child: _buildSidebar()) : null,
+      body: isMobile
+          ? Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(
                   children: [
                     Expanded(
@@ -402,9 +410,7 @@ Future<void> _loadFullConversation() async {
                         itemCount: chatMessages.length,
                         itemBuilder: (context, index) {
                           final message = chatMessages[index];
-
                           if (index == 0) return _buildWelcomeMessage();
-
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: _buildMessageBubble(
@@ -419,178 +425,203 @@ Future<void> _loadFullConversation() async {
                   ],
                 ),
               ),
-            ],
-          ),
-          /*if (_sidebarVisible)
-            GestureDetector(
-              onTap: _toggleSidebar,
-              child: Container(color: Colors.black.withOpacity(0.3)),
-            ),*/
-        ],
-      ),
+            )
+          : Row(
+              children: [
+                if (_sidebarVisible) _buildSidebar(),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          itemCount: chatMessages.length,
+                          itemBuilder: (context, index) {
+                            final message = chatMessages[index];
+                            if (index == 0) return _buildWelcomeMessage();
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: _buildMessageBubble(
+                                message: message["content"]!,
+                                isUser: message["role"] == 'user',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      _buildInputField(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
   Widget _buildSidebar() {
-    return Container(
-      width: 280,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: Image.asset(
-                        'assets/image.png',
-                        width: 24,
-                        height: 24,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  'CapyChat',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo chat'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  alignment: Alignment.centerLeft,
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
-                ),
-                onPressed: _startNewChat,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Text(
-                      'TUS PROMPTS',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.6),
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ),
-                  Expanded(
-  child: savedPromptNames.isEmpty
-      ? const Center(child: Text("No hay conversaciones guardadas"))
-      : ListView.builder(
-          key: Key('prompts_${savedPromptNames.length}'),
-          itemCount: savedPromptNames.length,
-          itemBuilder: (context, index) => ListTile(
-            title: Text(savedPromptNames[index]),
-            onTap: () async {
-              final prefs = await SharedPreferences.getInstance();
-              final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
-              final entry = allConversations
-                  .map((e) => jsonDecode(e))
-                  .firstWhere((e) => e['name'] == savedPromptNames[index]);
-              setState(() {
-                chatMessages = (entry['conversation'] as List)
-                    .map((msg) => Map<String, String>.from(jsonDecode(msg)))
-                    .toList();
-                _sidebarVisible = false;
-              });
-            },
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
-                final updated = allConversations
-                    .where((e) => jsonDecode(e)['name'] != savedPromptNames[index])
-                    .toList();
-                await prefs.setStringList('saved_conversations_names', updated);
-                setState(() {
-                  savedPromptNames.removeAt(index);
-                });
-              },
-            ),
-          ),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+    // Drawer width fijo en móvil (máx 280), sidebar normal en desktop
+    final sidebarWidth = isMobile ? 280.0 : 280.0;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        width: sidebarWidth,
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(right: BorderSide(color: Theme.of(context).dividerColor)),
         ),
-),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.asset(
+                          'assets/image.png',
+                          width: 24,
+                          height: 24,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'CapyChat',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                  ),
                 ],
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration:
-                BoxDecoration(border: Border(top: BorderSide(color: Theme.of(context).dividerColor))),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.save),
-                  title: const Text('Guardar prompt actual'),
-                  dense: true,
-                  onTap: _saveCurrentConversationWithName,
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo chat'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    alignment: Alignment.centerLeft,
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                  ),
+                  onPressed: _startNewChat,
                 ),
-                ListTile(
-                  leading: Icon(
-                    Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
-                  title: Text(
-                    Theme.of(context).brightness == Brightness.dark ? 'Modo claro' : 'Modo oscuro'),
-                  dense: true,
-                  onTap: _toggleTheme,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings),
-                  title: const Text('Configuración'),
-                  dense: true,
-                  onTap: () => _showSettingsDialog(context),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.help),
-                  title: const Text('Ayuda y soporte'),
-                  dense: true,
-                  onTap: () => _showHelpDialog(context),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Text(
+                        'TUS PROMPTS',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                    ),
+                    Expanded(
+                      child: savedPromptNames.isEmpty
+                          ? const Center(child: Text("No hay conversaciones guardadas"))
+                          : ListView.builder(
+                              key: Key('prompts_${savedPromptNames.length}'),
+                              itemCount: savedPromptNames.length,
+                              itemBuilder: (context, index) => ListTile(
+                                title: Text(savedPromptNames[index]),
+                                onTap: () async {
+                                  final prefs = await SharedPreferences.getInstance();
+                                  final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
+                                  final entry = allConversations
+                                      .map((e) => jsonDecode(e))
+                                      .firstWhere((e) => e['name'] == savedPromptNames[index]);
+                                  setState(() {
+                                    chatMessages = (entry['conversation'] as List)
+                                        .map((msg) => Map<String, String>.from(jsonDecode(msg)))
+                                        .toList();
+                                    _sidebarVisible = false;
+                                  });
+                                },
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  onPressed: () async {
+                                    final prefs = await SharedPreferences.getInstance();
+                                    final allConversations = prefs.getStringList('saved_conversations_names') ?? [];
+                                    final updated = allConversations
+                                        .where((e) => jsonDecode(e)['name'] != savedPromptNames[index])
+                                        .toList();
+                                    await prefs.setStringList('saved_conversations_names', updated);
+                                    setState(() {
+                                      savedPromptNames.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Theme.of(context).dividerColor))),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.save),
+                    title: const Text('Guardar prompt actual'),
+                    dense: true,
+                    onTap: _saveCurrentConversationWithName,
+                  ),
+                  ListTile(
+                    leading: Icon(
+                        Theme.of(context).brightness == Brightness.dark ? Icons.light_mode : Icons.dark_mode),
+                    title: Text(
+                        Theme.of(context).brightness == Brightness.dark ? 'Modo claro' : 'Modo oscuro'),
+                    dense: true,
+                    onTap: _toggleTheme,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.settings),
+                    title: const Text('Configuración'),
+                    dense: true,
+                    onTap: () => _showSettingsDialog(context),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.help),
+                    title: const Text('Ayuda y soporte'),
+                    dense: true,
+                    onTap: () => _showHelpDialog(context),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
