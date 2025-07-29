@@ -24,7 +24,7 @@ void _handleOtherAction() {
   print("Botón adicional presionado");
 }
 
-/*Future<void> pickPdfFile() async {
+Future<void> pickPdfFile() async {
   final result = await FilePicker.platform.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['pdf'],
@@ -60,43 +60,6 @@ void _handleOtherAction() {
     }
   } else {
     print("No se seleccionó ningún archivo.");
-  }
-}*/
-
-String pdf = ''; // define esta variable en tu clase _ChatScreenState
-
-Future<String?> pickPdfFile() async {
-  final result = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['pdf'],
-    withData: true,
-  );
-
-  if (result != null) {
-    Uint8List? fileBytes;
-
-    if (kIsWeb) {
-      fileBytes = result.files.single.bytes;
-    } else {
-      final filePath = result.files.single.path;
-      if (filePath != null) {
-        final File file = File(filePath);
-        fileBytes = await file.readAsBytes();
-      }
-    }
-
-    if (fileBytes != null) {
-      final PdfDocument document = PdfDocument(inputBytes: fileBytes);
-      final String text = PdfTextExtractor(document).extractText();
-      document.dispose();
-      return text;  // retorna el texto extraído
-    } else {
-      print("No se pudo obtener los bytes del archivo.");
-      return null;
-    }
-  } else {
-    print("No se seleccionó ningún archivo.");
-    return null;
   }
 }
 
@@ -486,6 +449,25 @@ Future<void> _loadFullConversation() async {
               Expanded(
                 child: Column(
                   children: [
+                    Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        Text('Texto del PDF:'),
+                        SizedBox(height: 20),
+                        Text(
+                          "_pdfText",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            pickPdfFile();
+                          },
+                          child: Text("Seleccionar archivo PDF"),
+                        ),
+                      ],
+                    ),
+                  ),
                     Expanded(
                       child: ListView.builder(
                         controller: _scrollController,
@@ -834,13 +816,10 @@ Future<void> _loadFullConversation() async {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : () async {
-                    final extractedText = await pickPdfFile();
-                    if (extractedText != null && extractedText.isNotEmpty) {
-                      print("transcrito");
-                      query(extractedText); // o la función que maneje la consulta con ese texto
-                    }
-                  },
+                  onPressed: () {
+                            _handleOtherAction();
+                            pickPdfFile();
+                          },
                   child: const Text("Otros"),
                 ),
               ],
