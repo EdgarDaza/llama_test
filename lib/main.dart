@@ -2,7 +2,15 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async'; 
+import 'dart:async';
+import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -10,6 +18,51 @@ void main() async {
   final isDarkMode = prefs.getBool('darkMode') ?? false;
   runApp(MyApp(isDarkMode: isDarkMode));
 }
+
+void _handleOtherAction() {
+  // Aquí va la lógica del nuevo botón
+  print("Botón adicional presionado");
+}
+
+Future<void> pickPdfFile() async {
+  final result = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['pdf'],
+    withData: true,  // importante para obtener bytes en web
+  );
+
+  if (result != null) {
+    Uint8List? fileBytes;
+
+    if (kIsWeb) {
+      // En web, obtenemos los bytes directamente
+      fileBytes = result.files.single.bytes;
+    } else {
+      // En móvil o escritorio, leemos el archivo desde la ruta
+      final filePath = result.files.single.path;
+      if (filePath != null) {
+        final File file = File(filePath);
+        fileBytes = await file.readAsBytes();
+      }
+    }
+
+    if (fileBytes != null) {
+      final PdfDocument document = PdfDocument(inputBytes: fileBytes);
+
+      final String text = PdfTextExtractor(document).extractText();
+
+      print("Texto extraído del PDF:");
+      print(text);
+
+      document.dispose();
+    } else {
+      print("No se pudo obtener los bytes del archivo.");
+    }
+  } else {
+    print("No se seleccionó ningún archivo.");
+  }
+}
+
 
 class MyApp extends StatefulWidget {
   final bool isDarkMode;
@@ -387,6 +440,7 @@ Future<void> _loadFullConversation() async {
           ),
         ],
       ),
+
       body: Stack(
         children: [
           Row(
@@ -395,6 +449,25 @@ Future<void> _loadFullConversation() async {
               Expanded(
                 child: Column(
                   children: [
+                    Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      children: [
+                        Text('Texto del PDF:'),
+                        SizedBox(height: 20),
+                        Text(
+                          "_pdfText",
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            pickPdfFile();
+                          },
+                          child: Text("Seleccionar archivo PDF"),
+                        ),
+                      ],
+                    ),
+                  ),
                     Expanded(
                       child: ListView.builder(
                         controller: _scrollController,
@@ -718,26 +791,40 @@ Future<void> _loadFullConversation() async {
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                        Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: CircleAvatar(
-                backgroundColor: Theme.of(context).colorScheme.secondary,
-                radius: 24,
-                child: IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white),
-                  onPressed: _isLoading ? null : () => query(_controller.text),
+                  child: CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                    radius: 24,
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed:
+                          _isLoading ? null : () => query(_controller.text),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () {
+                            _handleOtherAction();
+                            pickPdfFile();
+                          },
+                  child: const Text("Otros"),
+                ),
+              ],
             ),
+
           ],
         ),
       ),
