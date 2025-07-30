@@ -8,6 +8,9 @@ import 'dart:typed_data';
 import 'dart:io';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 
 
 
@@ -320,12 +323,7 @@ Future<void> _loadFullConversation() async {
           chatMessages.removeLast();
           _isLoading = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: ${e.toString()}"),
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-          ),
-        );
+        _showErrorSnackBar("Error de conexión: ${e.toString()}");
         completer.complete();
       });
 
@@ -335,23 +333,23 @@ Future<void> _loadFullConversation() async {
         chatMessages.removeLast();
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text("Error al conectar con el servidor"),
-          backgroundColor: Theme.of(context).colorScheme.secondary,
-        ),
-      );
+      _showErrorSnackBar("Error al conectar con el servidor (Código: ${response.statusCode})");
     }
   } catch (e) {
     setState(() {
       chatMessages.removeLast();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Error: ${e.toString()}"),
-          backgroundColor: Theme.of(context).colorScheme.secondary,
-        ),
-      );
     });
+    
+    // Manejo específico de errores
+    if (e.toString().contains('Connection refused') || e.toString().contains('Failed host lookup')) {
+      _showErrorSnackBar("No se puede conectar al servidor Ollama. Verifica que esté ejecutándose en localhost:11434");
+    } else if (e.toString().contains('timeout')) {
+      _showErrorSnackBar("Tiempo de espera agotado. El servidor está tardando en responder");
+    } else if (e.toString().contains('SocketException')) {
+      _showErrorSnackBar("Error de red. Verifica tu conexión a internet");
+    } else {
+      _showErrorSnackBar("Error inesperado: ${e.toString()}");
+    }
   } finally {
     setState(() {
       _isLoading = false;
@@ -359,6 +357,126 @@ Future<void> _loadFullConversation() async {
     });
   }
 }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red[700],
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Reintentar',
+          textColor: Colors.white,
+          onPressed: () {
+            // Reintentar la última consulta
+            if (chatMessages.isNotEmpty && chatMessages.last["role"] == "user") {
+              final lastMessage = chatMessages.last["content"]!;
+              chatMessages.removeLast();
+              query(lastMessage);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportConversation() async {
+    if (chatMessages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No hay conversación para exportar"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Solicitar permisos en Android
+      if (!kIsWeb && Platform.isAndroid) {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Se necesitan permisos para guardar el archivo"),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      // Crear contenido del archivo
+      final StringBuffer exportContent = StringBuffer();
+      exportContent.writeln("=== Conversación de CapyChat ===");
+      exportContent.writeln("Fecha: ${DateTime.now().toString().split('.')[0]}");
+      exportContent.writeln("Total de mensajes: ${chatMessages.length}");
+      exportContent.writeln("=" * 50);
+      exportContent.writeln();
+
+      for (int i = 0; i < chatMessages.length; i++) {
+        final message = chatMessages[i];
+        final role = message["role"] == "user" ? "Usuario" : "CapyChat";
+        final content = message["content"]!;
+        
+        exportContent.writeln("$role:");
+        exportContent.writeln(content);
+        exportContent.writeln();
+      }
+
+      // Obtener directorio para guardar
+      Directory? directory;
+      if (kIsWeb) {
+        // En web, mostrar el contenido para copiar manualmente
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Exportar Conversación'),
+            content: SingleChildScrollView(
+              child: SelectableText(exportContent.toString()),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cerrar'),
+              ),
+            ],
+          ),
+        );
+        return;
+      } else {
+        // En móvil/desktop
+        if (Platform.isAndroid) {
+          directory = Directory('/storage/emulated/0/Download');
+        } else if (Platform.isIOS) {
+          directory = await getApplicationDocumentsDirectory();
+        } else {
+          directory = await getDownloadsDirectory();
+        }
+
+        if (directory != null) {
+          final fileName = "capychat_conversacion_${DateTime.now().millisecondsSinceEpoch}.txt";
+          final file = File('${directory.path}/$fileName');
+          await file.writeAsString(exportContent.toString(), encoding: utf8);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Conversación exportada a: ${file.path}"),
+              backgroundColor: Colors.green[700],
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error al exportar: ${e.toString()}"),
+          backgroundColor: Colors.red[700],
+        ),
+      );
+    }
+  }
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -694,6 +812,12 @@ Future<void> _loadFullConversation() async {
                     title: const Text('Guardar conversación actual'),
                     dense: true,
                     onTap: _saveCurrentConversationWithName,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.download),
+                    title: const Text('Exportar conversación'),
+                    dense: true,
+                    onTap: _exportConversation,
                   ),
                   ListTile(
                     leading: Icon(
