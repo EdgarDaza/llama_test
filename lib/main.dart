@@ -10,6 +10,7 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:html' if (dart.library.io) 'dart:io' as html;
 
 
 
@@ -429,27 +430,27 @@ Future<void> _loadFullConversation() async {
         exportContent.writeln();
       }
 
-      // Obtener directorio para guardar
-      Directory? directory;
-      if (kIsWeb) {
-        // En web, mostrar el contenido para copiar manualmente
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Exportar Conversación'),
-            content: SingleChildScrollView(
-              child: SelectableText(exportContent.toString()),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          ),
-        );
-        return;
-      } else {
+             // Obtener directorio para guardar
+       Directory? directory;
+       if (kIsWeb) {
+         // En web, descargar el archivo directamente
+         final bytes = utf8.encode(exportContent.toString());
+         final blob = html.Blob([bytes]);
+         final url = html.Url.createObjectUrlFromBlob(blob);
+         final anchor = html.AnchorElement(href: url)
+           ..setAttribute("download", "capychat_conversacion_${DateTime.now().millisecondsSinceEpoch}.txt")
+           ..click();
+         html.Url.revokeObjectUrl(url);
+         
+         ScaffoldMessenger.of(context).showSnackBar(
+           const SnackBar(
+             content: Text("Conversación descargada como archivo .txt"),
+             backgroundColor: Colors.green,
+             duration: Duration(seconds: 2),
+           ),
+         );
+         return;
+       } else {
         // En móvil/desktop
         if (Platform.isAndroid) {
           directory = Directory('/storage/emulated/0/Download');
