@@ -17,9 +17,6 @@ class MyApp extends StatefulWidget {
 
   @override
   State<MyApp> createState() => _MyAppState();
-
-  static _MyAppState? of(BuildContext context) =>
-      context.findAncestorStateOfType<_MyAppState>();
 }
 
 class _MyAppState extends State<MyApp> {
@@ -45,7 +42,7 @@ class _MyAppState extends State<MyApp> {
       theme: _buildLightTheme(),
       darkTheme: _buildDarkTheme(),
       themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      home: const ChatScreen(),
+      home: ChatScreen(onToggleTheme: toggleTheme),
     );
   }
 
@@ -93,7 +90,8 @@ class _MyAppState extends State<MyApp> {
 }
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final VoidCallback onToggleTheme;
+  const ChatScreen({super.key, required this.onToggleTheme});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -296,7 +294,7 @@ Future<void> _loadFullConversation() async {
   }
 
   void _toggleTheme() {
-    MyApp.of(context)?.toggleTheme();
+    widget.onToggleTheme();
   }
 
   void _saveCurrentConversationWithName() async {
