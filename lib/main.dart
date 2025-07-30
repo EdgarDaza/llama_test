@@ -375,7 +375,7 @@ Future<void> _loadFullConversation() async {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth < 768; // Cambiado de 600 a 768 para incluir laptops
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
@@ -387,7 +387,10 @@ Future<void> _loadFullConversation() async {
                   onPressed: () => Scaffold.of(context).openDrawer(),
                 ),
               )
-            : null,
+            : IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: _toggleSidebar,
+              ),
         title: const Text('CapyChat'),
         actions: [
           IconButton(
@@ -461,7 +464,7 @@ Future<void> _loadFullConversation() async {
 
   Widget _buildSidebar() {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 600;
+    final isMobile = screenWidth < 768;
     // Drawer width fijo en móvil (máx 280), sidebar normal en desktop
     final sidebarWidth = isMobile ? 280.0 : 280.0;
     return Align(
