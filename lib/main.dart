@@ -22,48 +22,6 @@ void main() async {
   runApp(MyApp(isDarkMode: isDarkMode));
 }
 
-
-/*Future<void> pickPdfFile() async {
-  final result = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['pdf'],
-    withData: true,  // importante para obtener bytes en web
-  );
-
-  if (result != null) {
-    Uint8List? fileBytes;
-
-    if (kIsWeb) {
-      // En web, obtenemos los bytes directamente
-      fileBytes = result.files.single.bytes;
-    } else {
-      // En móvil o escritorio, leemos el archivo desde la ruta
-      final filePath = result.files.single.path;
-      if (filePath != null) {
-        final File file = File(filePath);
-        fileBytes = await file.readAsBytes();
-      }
-    }
-
-    if (fileBytes != null) {
-      final PdfDocument document = PdfDocument(inputBytes: fileBytes);
-
-      final String text = PdfTextExtractor(document).extractText();
-
-      print("Texto extraído del PDF:");
-      print(text);
-
-      document.dispose();
-    } else {
-      print("No se pudo obtener los bytes del archivo.");
-    }
-  } else {
-    print("No se seleccionó ningún archivo.");
-  }
-}*/
-
-String pdf = ''; // define esta variable en tu clase _ChatScreenState
-
 Future<Map<String, dynamic>?> pickPdfFile() async {
   final result = await FilePicker.platform.pickFiles(
     type: FileType.custom,
@@ -213,10 +171,6 @@ List<String> savedPromptNames = [];
 void initState() {
   super.initState();
   _loadSavedPromptNames(); // Cargar prompts al iniciar
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _toggleTheme(); // Sincroniza tema al cargar
-    
-  });
 }
 
 Future<void> _loadSavedPromptNames() async {
@@ -225,34 +179,6 @@ Future<void> _loadSavedPromptNames() async {
   setState(() {
     savedPromptNames = allConversations
         .map((e) => jsonDecode(e)['name'] as String)
-        .toList();
-  });
-}
-
-void _saveFullConversation() async {
-  final prefs = await SharedPreferences.getInstance();
-
-  // Convierte cada mensaje a JSON string
-  final conversationJson = chatMessages.map((msg) => jsonEncode(msg)).toList();
-
-  await prefs.setStringList('saved_conversation', conversationJson);
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: const Text("Conversación guardada"),
-      backgroundColor: Theme.of(context).colorScheme.secondary,
-    ),
-  );
-}
-
-
-
-Future<void> _loadFullConversation() async {
-  final prefs = await SharedPreferences.getInstance();
-  final conversationJson = prefs.getStringList('saved_conversation') ?? [];
-  setState(() {
-    chatMessages = conversationJson
-        .map((msg) => Map<String, String>.from(jsonDecode(msg)))
         .toList();
   });
 }
@@ -1256,36 +1182,4 @@ Future<void> _loadFullConversation() async {
     ),
   );
 }
-}
-
-class CapybaraLogoPainter extends CustomPainter {
-  final Color color;
-  const CapybaraLogoPainter({this.color = Colors.black});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = color..style = PaintingStyle.fill;
-
-    final bodyRect = Rect.fromCenter(
-      center: Offset(size.width * 0.5, size.height * 0.6),
-      width: size.width * 0.8,
-      height: size.height * 0.7,
-    );
-    canvas.drawOval(bodyRect, paint);
-
-    final headRect = Rect.fromCenter(
-      center: Offset(size.width * 0.5, size.height * 0.3),
-      width: size.width * 0.5,
-      height: size.height * 0.5,
-    );
-    canvas.drawOval(headRect, paint);
-
-    final leftEar = Offset(size.width * 0.3, size.height * 0.2);
-    final rightEar = Offset(size.width * 0.7, size.height * 0.2);
-    canvas.drawCircle(leftEar, size.width * 0.1, paint);
-    canvas.drawCircle(rightEar, size.width * 0.1, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
