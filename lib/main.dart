@@ -691,7 +691,7 @@ Future<void> _loadFullConversation() async {
                 children: [
                   ListTile(
                     leading: const Icon(Icons.save),
-                    title: const Text('Guardar prompt actual'),
+                    title: const Text('Guardar conversación actual'),
                     dense: true,
                     onTap: _saveCurrentConversationWithName,
                   ),
@@ -896,23 +896,39 @@ Future<void> _loadFullConversation() async {
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : () async {
-                    final extractedText = await pickPdfFile();
-                    if (extractedText != null && extractedText.isNotEmpty) {
-                      setState(() {
-                        chatMessages.add({
-                          "role": "user",
-                          "content": "[Archivo PDF enviado]",
-                          "type": "pdf",
-                        });
-                        _isLoading = true;
-                      });
-                      // Envía el texto real a la API, pero indica que es PDF
-                      await query(extractedText, type: "pdf");
-                    }
-                  },
-                  child: const Text("Otros"),
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    radius: 24,
+                    child: IconButton(
+                      icon: const Icon(Icons.attach_file, color: Colors.white),
+                      onPressed: _isLoading ? null : () async {
+                        final extractedText = await pickPdfFile();
+                        if (extractedText != null && extractedText.isNotEmpty) {
+                          setState(() {
+                            chatMessages.add({
+                              "role": "user",
+                              "content": "[Archivo PDF enviado]",
+                              "type": "pdf",
+                            });
+                            _isLoading = true;
+                          });
+                          // Envía el texto real a la API, pero indica que es PDF
+                          await query(extractedText, type: "pdf");
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ],
             ),
