@@ -6,7 +6,6 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -19,10 +18,6 @@ void main() async {
   runApp(MyApp(isDarkMode: isDarkMode));
 }
 
-void _handleOtherAction() {
-  // Aquí va la lógica del nuevo botón
-  print("Botón adicional presionado");
-}
 
 /*Future<void> pickPdfFile() async {
   final result = await FilePicker.platform.pickFiles(
@@ -126,6 +121,7 @@ class _MyAppState extends State<MyApp> {
     setState(() => _isDarkMode = !_isDarkMode);
     await prefs.setBool('darkMode', _isDarkMode);
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -254,21 +250,30 @@ Future<void> _loadFullConversation() async {
   });
 }
 
-  Future<void> query(String prompt) async {
+  Future<void> query(String prompt, {String? type}) async {
   if (prompt.isEmpty) return;
 
   setState(() {
     _isLoading = true;
-    chatMessages.add({"role": "user", "content": prompt});
-    // Solo para mostrar el streaming en la UI
+    // Solo agrega el mensaje al chat si NO es PDF
+    if (type != "pdf") {
+      chatMessages.add({"role": "user", "content": prompt});
+    }
+    // Mensaje vacío para la respuesta del sistema
     chatMessages.add({"role": "system", "content": ""});
     _scrollToBottom();
   });
 
   // Prepara los mensajes para enviar a Ollama (sin el mensaje vacío)
   final messagesToSend = List<Map<String, String>>.from(chatMessages);
+
   if (messagesToSend.isNotEmpty && messagesToSend.last["content"] == "") {
     messagesToSend.removeLast();
+  }
+
+  // Si es PDF, agrega el mensaje real SOLO para la API
+  if (type == "pdf") {
+    messagesToSend.add({"role": "user", "content": prompt});
   }
 
   final data = {
@@ -501,6 +506,7 @@ Future<void> _loadFullConversation() async {
                             child: _buildMessageBubble(
                               message: message["content"]!,
                               isUser: message["role"] == 'user',
+                              type: message["type"], // <-- pasa el tipo
                             ),
                           );
                         },
@@ -732,7 +738,8 @@ Future<void> _loadFullConversation() async {
     );
   }
 
-  Widget _buildMessageBubble({required String message, required bool isUser}) {
+  Widget _buildMessageBubble({required String message, required bool isUser, String? type}) {
+  if (type == "pdf") {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -742,28 +749,52 @@ Future<void> _loadFullConversation() async {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isUser
-                ? Theme.of(context).colorScheme.secondary.withOpacity(0.1)
-                : Theme.of(context).colorScheme.surface,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isUser
-                  ? Theme.of(context).colorScheme.secondary.withOpacity(0.3)
-                  : Colors.transparent,
-            ),
           ),
-          child: Text(
-            message,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.picture_as_pdf, color: Colors.red, size: 32),
+              const SizedBox(width: 8),
+              Text("Archivo PDF enviado", style: Theme.of(context).textTheme.bodyMedium),
+            ],
           ),
         ),
       ),
     );
   }
-
+  // ...código existente para mensajes normales...
+  return Align(
+    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.8,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isUser
+              ? Theme.of(context).colorScheme.secondary.withOpacity(0.1)
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isUser
+                ? Theme.of(context).colorScheme.secondary.withOpacity(0.3)
+                : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          message,
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+        ),
+      ),
+    ),
+  );
+}
   Widget _buildInputField() {
     return SafeArea(
       top: false,
@@ -837,8 +868,16 @@ Future<void> _loadFullConversation() async {
                   onPressed: _isLoading ? null : () async {
                     final extractedText = await pickPdfFile();
                     if (extractedText != null && extractedText.isNotEmpty) {
-                      print("transcrito");
-                      query(extractedText); // o la función que maneje la consulta con ese texto
+                      setState(() {
+                        chatMessages.add({
+                          "role": "user",
+                          "content": "[Archivo PDF enviado]",
+                          "type": "pdf",
+                        });
+                        _isLoading = true;
+                      });
+                      // Envía el texto real a la API, pero indica que es PDF
+                      await query(extractedText, type: "pdf");
                     }
                   },
                   child: const Text("Otros"),
