@@ -63,7 +63,7 @@ void main() async {
 
 String pdf = ''; // define esta variable en tu clase _ChatScreenState
 
-Future<String?> pickPdfFile() async {
+Future<Map<String, dynamic>?> pickPdfFile() async {
   final result = await FilePicker.platform.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['pdf'],
@@ -72,6 +72,7 @@ Future<String?> pickPdfFile() async {
 
   if (result != null) {
     Uint8List? fileBytes;
+    final fileName = result.files.single.name;
 
     if (kIsWeb) {
       fileBytes = result.files.single.bytes;
@@ -87,7 +88,11 @@ Future<String?> pickPdfFile() async {
       final PdfDocument document = PdfDocument(inputBytes: fileBytes);
       final String text = PdfTextExtractor(document).extractText();
       document.dispose();
-      return text;  // retorna el texto extraído
+      
+      return {
+        'text': text,
+        'fileName': fileName,
+      };
     } else {
       print("No se pudo obtener los bytes del archivo.");
       return null;
@@ -896,6 +901,12 @@ Future<void> _loadFullConversation() async {
 
   Widget _buildMessageBubble({required String message, required bool isUser, String? type}) {
   if (type == "pdf") {
+    // Extraer el nombre del archivo del mensaje
+    String fileName = "Archivo PDF";
+    if (message.startsWith("[Archivo PDF:") && message.endsWith("]")) {
+      fileName = message.substring(13, message.length - 1); // Remover "[Archivo PDF:" y "]"
+    }
+    
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -913,7 +924,25 @@ Future<void> _loadFullConversation() async {
             children: [
               Icon(Icons.picture_as_pdf, color: Colors.red, size: 32),
               const SizedBox(width: 8),
-              Text("Archivo PDF enviado", style: Theme.of(context).textTheme.bodyMedium),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      fileName,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      "Archivo PDF cargado",
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -1037,18 +1066,86 @@ Future<void> _loadFullConversation() async {
                     child: IconButton(
                       icon: const Icon(Icons.attach_file, color: Colors.white),
                       onPressed: _isLoading ? null : () async {
-                        final extractedText = await pickPdfFile();
-                        if (extractedText != null && extractedText.isNotEmpty) {
-                          setState(() {
-                            chatMessages.add({
-                              "role": "user",
-                              "content": "[Archivo PDF enviado]",
-                              "type": "pdf",
+                        final pdfData = await pickPdfFile();
+                        if (pdfData != null && pdfData['text'].isNotEmpty) {
+                          // Mostrar diálogo para agregar contexto/prompt
+                          final TextEditingController promptController = TextEditingController();
+                          final prompt = await showDialog<String>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text('Analizar PDF: ${pdfData['fileName']}'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Agrega contexto o instrucciones para el análisis:',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: promptController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Ej: Analiza este documento y resúmelo...',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    maxLines: 3,
+                                    autofocus: true,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Ejemplos de prompts útiles:',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '• "Resume los puntos principales"',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  Text(
+                                    '• "Extrae las fechas importantes"',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                  Text(
+                                    '• "Analiza y explica el contenido"',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Cancelar'),
+                                ),
+                                FilledButton(
+                                  onPressed: () => Navigator.pop(context, promptController.text.trim()),
+                                  child: const Text('Analizar PDF'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (prompt != null) {
+                            setState(() {
+                              chatMessages.add({
+                                "role": "user",
+                                "content": "[Archivo PDF: ${pdfData['fileName']}]",
+                                "type": "pdf",
+                                "fileName": pdfData['fileName'],
+                              });
+                              _isLoading = true;
                             });
-                            _isLoading = true;
-                          });
-                          // Envía el texto real a la API, pero indica que es PDF
-                          await query(extractedText, type: "pdf");
+                            
+                            // Combinar el prompt del usuario con el texto del PDF
+                            final combinedPrompt = prompt.isNotEmpty 
+                                ? "$prompt\n\nContenido del PDF:\n${pdfData['text']}"
+                                : "Analiza el siguiente documento:\n\n${pdfData['text']}";
+                            
+                            // Envía el texto combinado a la API
+                            await query(combinedPrompt, type: "pdf");
+                          }
                         }
                       },
                     ),
