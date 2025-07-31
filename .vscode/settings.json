@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "C:/Users/fredy/OneDrive/Documentos/DS VI/llama_test/linux"
+    "cmake.sourceDirectory": "C:/Users/fredy/OneDrive/Documentos/DS VI/llama_test/linux",
+    "cmake.ignoreCMakeListsMissing": true
 }

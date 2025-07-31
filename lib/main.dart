@@ -459,7 +459,7 @@ Future<void> _loadSavedPromptNames() async {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context), // Cancelar
+          onPressed: () => Navigator.pop(context), 
           child: const Text('Cancelar'),
         ),
         TextButton(
@@ -518,8 +518,7 @@ Future<void> _loadSavedPromptNames() async {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 768; // Cambiado de 600 a 768 para incluir laptops
-
+    final isMobile = screenWidth < 768; 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
       appBar: AppBar(
@@ -831,7 +830,7 @@ Future<void> _loadSavedPromptNames() async {
     // Extraer el nombre del archivo del mensaje
     String fileName = "Archivo PDF";
     if (message.startsWith("[Archivo PDF:") && message.endsWith("]")) {
-      fileName = message.substring(13, message.length - 1); // Remover "[Archivo PDF:" y "]"
+      fileName = message.substring(13, message.length - 1); 
     }
     
     return Align(
